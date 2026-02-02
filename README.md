@@ -20,6 +20,7 @@ Add the following to your `~/.bashrc`:
 
 
 # --- orphan wrappers ---
+
 orp() {
     nohup setsid "$@" >/dev/null 2>&1 < /dev/null
     echo "orphan, no child ($pid)" >&2
