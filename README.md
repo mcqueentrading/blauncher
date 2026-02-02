@@ -69,8 +69,13 @@ _orphan_complete() {
     COMPREPLY=( $(compgen -c -f -- "$cur") )
 }
 
-Reload your shell or run:
+
+```
+
+#Reload your shell or run:
+```
 source ~/.bashrc
+```
 License
 
 Licensed under the GNU General Public License v3.0 (GPL-3.0).
