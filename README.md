@@ -21,14 +21,15 @@ Tab completion works normally for commands and files.
 
 ## Functions
 
-- **`orp`** — Runs a command fully detached using `nohup` and `setsid`.  
-  Does **not** exit the shell.
+- **`orp`** — Launches a program fully detached using `nohup` and `setsid`.  
+  The shell continues running after the program is launched. Program will survive logout. 
 
-- **`op`** — Runs a command detached using `setsid` and prints the PID.  
-  Does **not** exit the shell.
+- **`op`** — Launches a program detached using `setsid` and prints the PID.  
+  The shell continues running after the program is launched.
 
-- **`o`** — Runs a command detached using `setsid`, prints the PID,  
+- **`o`** — Launches a program detached using `setsid`, prints the PID,  
   waits until the process exists, and then exits the shell.
+
 
 ---
 
@@ -54,7 +55,7 @@ o() {
     pid=$!
     echo "orphan, no child ($pid)" >&2
 
-    # wait until the process exists
+    # wait indefinitely for the process to exist, silently
     while ! kill -0 "$pid" >/dev/null 2>&1; do
         sleep 0.2
     done
@@ -69,10 +70,11 @@ _orphan_complete() {
     COMPREPLY=( $(compgen -c -f -- "$cur") )
 }
 
-
+# --- attach completion (MUST come after function) ---
+complete -F _orphan_complete o op orp
 ```
 
-#Reload your shell or run:
+Reload your shell or run:
 ```
 source ~/.bashrc
 ```
@@ -88,5 +90,3 @@ See the LICENSE
  file for the full license text.
 
 GitHub: https://github.com/mcqueentrading
-# --- attach completion (MUST come after function) ---
-complete -F _orphan_complete o op orp
