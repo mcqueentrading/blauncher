@@ -36,7 +36,7 @@ o() {
     pid=$!
     echo "orphan, no child ($pid)" >&2
 
-    # wait indefinitely for the process to exist, silently
+    
     while ! kill -0 "$pid" >/dev/null 2>&1; do
         sleep 0.2
     done
