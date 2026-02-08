@@ -1,0 +1,21 @@
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Test artifacts
+test_output/
+*.log
+
+# Temporary files
+tmp/
+temp/
+*.tmp
