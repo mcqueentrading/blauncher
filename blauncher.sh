@@ -1,119 +1,84 @@
 #!/usr/bin/env bash
-# blauncher installer - modular version
-# Installs blauncher to ~/.local/bin and adds minimal sourcing to ~/.bashrc
+# blauncher - Bash orphan process launcher with smart tab completion
+# https://github.com/mcqueentrading/blauncher
+# Licensed under GPL-3.0
 
-set -e
+#######################
+# ORPHAN WRAPPERS
+#######################
 
-INSTALL_DIR="$HOME/.local/bin"
-BASHRC="$HOME/.bashrc"
-SCRIPT_NAME="blauncher.sh"
-BLAUNCHER_URL="https://raw.githubusercontent.com/mcqueentrading/blauncher/main/blauncher.sh"
+# orp - Orphan Resilient Process
+# Launches a program with nohup for maximum resilience against hangups.
+# The shell continues running after launch.
+orp() {
+    nohup setsid "$@" >/dev/null 2>&1 < /dev/null
+    echo "orphan, no child" >&2
+}
 
-echo "==============================================="
-echo "  blauncher installer (modular)"
-echo "==============================================="
-echo ""
+# op - Orphan with PID
+# Launches a program detached and prints the PID.
+# The shell continues running after launch.
+op() {
+    pid=$(setsid "$@" >/dev/null 2>&1 & echo $!)
+    echo "orphan, no child ($pid)" >&2
+}
 
-# Create ~/.local/bin if it doesn't exist
-if [ ! -d "$INSTALL_DIR" ]; then
-    echo "Creating $INSTALL_DIR..."
-    mkdir -p "$INSTALL_DIR"
-fi
-
-# Check if ~/.local/bin is in PATH
-if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
-    echo ""
-    echo "⚠️  $INSTALL_DIR is not in your PATH"
-    echo ""
+# oo - Orphan and Exit
+# Launches a program detached, waits for it to start, then exits the shell.
+# Useful for quick launches where you don't need the terminal anymore.
+oo() {
+    nohup setsid "$@" >/dev/null 2>&1 < /dev/null &
+    pid=$!
+    echo "orphan, no child ($pid)" >&2
     
-    # Check if bashrc exists
-    if [ ! -f "$BASHRC" ]; then
-        echo "Creating ~/.bashrc..."
-        touch "$BASHRC"
-    fi
+    # Wait for the process to start (polling with kill -0)
+    # Timeout after 5 seconds to prevent infinite hangs
+    local max_attempts=25  # 25 * 0.2s = 5 seconds
+    local attempts=0
     
-    # Add to PATH in bashrc
-    echo "Adding $INSTALL_DIR to PATH in ~/.bashrc..."
-    echo "" >> "$BASHRC"
-    echo "# Add ~/.local/bin to PATH" >> "$BASHRC"
-    echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$BASHRC"
-    echo ""
-    
-    echo "✓ PATH updated in ~/.bashrc"
-fi
-
-# Download or use local file
-if [ -f "$SCRIPT_NAME" ]; then
-    echo "✓ Using local $SCRIPT_NAME"
-    cp "$SCRIPT_NAME" "$INSTALL_DIR/$SCRIPT_NAME"
-else
-    echo "📥 Downloading $SCRIPT_NAME..."
-    if command -v curl >/dev/null 2>&1; then
-        curl -fsSL "$BLAUNCHER_URL" -o "$INSTALL_DIR/$SCRIPT_NAME"
-    elif command -v wget >/dev/null 2>&1; then
-        wget -q "$BLAUNCHER_URL" -O "$INSTALL_DIR/$SCRIPT_NAME"
-    else
-        echo "Error: Neither curl nor wget found. Please install one of them."
-        exit 1
-    fi
-fi
-
-# Make executable
-chmod +x "$INSTALL_DIR/$SCRIPT_NAME"
-echo "✓ Installed to $INSTALL_DIR/$SCRIPT_NAME"
-
-# Check if bashrc already sources blauncher
-if [ -f "$BASHRC" ]; then
-    if grep -q "source.*blauncher" "$BASHRC" 2>/dev/null; then
-        echo ""
-        echo "⚠️  blauncher sourcing already exists in ~/.bashrc"
-        echo ""
-        read -p "Do you want to update it? (y/N): " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            echo "Skipping bashrc update."
-        else
-            # Remove old sourcing lines
-            sed -i '/# Source blauncher/,/source.*blauncher/d' "$BASHRC"
-            
-            # Add new sourcing
-            echo "" >> "$BASHRC"
-            echo "# Source blauncher for oo, op, orp commands" >> "$BASHRC"
-            echo "[ -f \"\$HOME/.local/bin/blauncher.sh\" ] && source \"\$HOME/.local/bin/blauncher.sh\"" >> "$BASHRC"
-            echo ""
-            echo "✓ Updated ~/.bashrc"
+    while ! kill -0 "$pid" >/dev/null 2>&1; do
+        sleep 0.2
+        attempts=$((attempts + 1))
+        
+        if [ $attempts -ge $max_attempts ]; then
+            echo "Warning: Process may have exited immediately" >&2
+            break
         fi
-    else
-        # Add sourcing to bashrc
-        echo ""
-        echo "📝 Adding blauncher to ~/.bashrc..."
-        echo "" >> "$BASHRC"
-        echo "# Source blauncher for oo, op, orp commands" >> "$BASHRC"
-        echo "[ -f \"\$HOME/.local/bin/blauncher.sh\" ] && source \"\$HOME/.local/bin/blauncher.sh\"" >> "$BASHRC"
-        echo ""
-        echo "✓ Updated ~/.bashrc"
-    fi
-else
-    echo "⚠️  ~/.bashrc not found. You'll need to manually source blauncher."
-    echo "   Add this to your shell config:"
-    echo "   source \"\$HOME/.local/bin/blauncher.sh\""
-fi
+    done
+    
+    exit
+}
 
-echo ""
-echo "✅ Installation complete!"
-echo ""
-echo "blauncher is installed to: $INSTALL_DIR/$SCRIPT_NAME"
-echo ""
-echo "To start using blauncher, run:"
-echo "  source ~/.bashrc"
-echo ""
-echo "Or open a new terminal."
-echo ""
-echo "Usage examples:"
-echo "  oo firefox                    # Launch Firefox and exit shell"
-echo "  op nemo ~/Downloads           # Open file manager, keep shell"
-echo "  orp chromium                  # Launch with maximum resilience"
-echo ""
-echo "For more information, visit:"
-echo "  https://github.com/mcqueentrading/blauncher"
-echo ""
+#######################
+# TAB COMPLETION
+#######################
+
+# Smart completion function for blauncher commands
+# - First argument: completes command names from $PATH
+# - Subsequent arguments: completes files and directories
+# - Adds trailing slash for directories
+_orphan_complete() {
+    local cur prev
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+    
+    # First argument: complete command names only
+    if [ $COMP_CWORD -eq 1 ]; then
+        COMPREPLY=( $(compgen -c -- "$cur") )
+    else
+        # Subsequent arguments: complete files and directories
+        COMPREPLY=( $(compgen -f -- "$cur") )
+        
+        # Special handling for single directory matches
+        # Add trailing slash and prevent automatic space
+        if [ ${#COMPREPLY[@]} -eq 1 ] && [ -d "${COMPREPLY[0]}" ]; then
+            COMPREPLY[0]="${COMPREPLY[0]}/"
+            compopt -o nospace
+        fi
+    fi
+}
+
+# Attach completion to all three wrapper functions
+# IMPORTANT: This must come AFTER the _orphan_complete function definition
+# -o nospace: prevents automatic space after completion for better directory navigation
+complete -o nospace -F _orphan_complete oo op orp
